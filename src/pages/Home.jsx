@@ -89,6 +89,7 @@ export default function Home() {
         </div>
       </div>
       {import.meta.env.DEV && <NetworkInfo />}
+      <div className="developer-credit">Developed by B Sai Praneeth</div>
     </div>
   );
 }

@@ -42,12 +42,12 @@ export default function ChatRoom() {
     const connectSocket = async () => {
       setIsLoading(true);
 
-      // ✅ dynamic backend URL
+      // Dynamic backend URL
       const socketUrl = getServerUrl();
       console.log(`🔗 Connecting to server: ${socketUrl}`);
       setServerInfo(`Connecting to: ${socketUrl}`);
 
-      // ✅ wake up Render free instance before connecting
+      // Wake up Render free instance before connecting
       try {
         await fetch(`${socketUrl}/health`, { cache: "no-store" });
         console.log("✅ Backend awake");
@@ -55,7 +55,7 @@ export default function ChatRoom() {
         console.warn("⚠️ Backend wakeup failed:", err);
       }
 
-      // ✅ establish socket connection
+      // Establish socket connection
       const newSocket = io(socketUrl, {
         transports: ["websocket", "polling"],
         reconnection: true,
@@ -67,22 +67,21 @@ export default function ChatRoom() {
 
       socketRef.current = newSocket;
 
-      // ====== Event Listeners ======
+      // Event Listeners
       newSocket.on("connect", () => {
         console.log("✅ Connected to server");
         setIsConnected(true);
         setError("");
         setServerInfo(`Connected to: ${socketUrl}`);
         setIsLoading(false);
-
         newSocket.emit("joinRoom", {
-          username,
-          roomCode,
+          username: username,
+          roomCode: roomCode,
         });
       });
 
       newSocket.on("disconnect", (reason) => {
-        console.log("❌ Disconnected:", reason);
+        console.log("❌ Disconnected from server:", reason);
         setIsConnected(false);
         setServerInfo(`Disconnected: ${reason}`);
         if (reason === "io server disconnect") {
@@ -90,9 +89,17 @@ export default function ChatRoom() {
         }
       });
 
-      newSocket.on("connect_error", (err) => {
-        console.error("Connection error:", err);
-        setError("Failed to connect to chat server. Please retry.");
+      newSocket.on("connect_error", (error) => {
+        console.error("Connection error:", error);
+        let errorMessage = "Failed to connect to chat server. ";
+        if (error.message.includes("ECONNREFUSED")) {
+          errorMessage += `Make sure the server is running at ${socketUrl}`;
+        } else if (error.message.includes("timeout")) {
+          errorMessage += "Connection timeout. Check your network.";
+        } else {
+          errorMessage += error.message;
+        }
+        setError(errorMessage);
         setIsConnected(false);
         setIsLoading(false);
       });
@@ -103,79 +110,103 @@ export default function ChatRoom() {
       });
 
       newSocket.on("reconnect", () => {
-        console.log("✅ Reconnected");
+        console.log("✅ Reconnected to server");
         setError("");
         setIsConnected(true);
-        newSocket.emit("joinRoom", { username, roomCode });
+        newSocket.emit("joinRoom", {
+          username: username,
+          roomCode: roomCode,
+        });
       });
 
       newSocket.on("reconnect_failed", () => {
         console.error("❌ Reconnection failed");
-        setError("Failed to reconnect. Please refresh.");
+        setError("Failed to reconnect. Please refresh the page.");
       });
 
-      // ====== Message Events ======
-      newSocket.on("loadMessages", (msgs) => {
-        setMessages(msgs || []);
+      newSocket.on("error", (errorMsg) => {
+        setError(errorMsg);
+        setTimeout(() => setError(""), 5000);
+      });
+
+      newSocket.on("loadMessages", (msgList) => {
+        setMessages(msgList || []);
         setIsLoading(false);
       });
 
-      newSocket.on("message", (msg) => setMessages((prev) => [...prev, msg]));
-
-      newSocket.on("systemMessage", (msg) =>
-        setMessages((prev) => [...prev, msg])
-      );
-
-      newSocket.on("roomUsers", (list) => setUsers(list || []));
-
-      // ====== Typing Events ======
-      newSocket.on("userTyping", (user) => {
-        setTypingUsers((prev) => new Set(prev).add(user));
+      newSocket.on("message", (msgData) => {
+        setMessages((prev) => [...prev, msgData]);
       });
 
-      newSocket.on("userStoppedTyping", (user) => {
+      newSocket.on("systemMessage", (sysMsg) => {
+        setMessages((prev) => [...prev, sysMsg]);
+      });
+
+      newSocket.on("roomUsers", (userList) => {
+        setUsers(userList || []);
+      });
+
+      newSocket.on("userTyping", (typingUsername) => {
         setTypingUsers((prev) => {
-          const next = new Set(prev);
-          next.delete(user);
-          return next;
+          const newSet = new Set(prev);
+          newSet.add(typingUsername);
+          return newSet;
+        });
+      });
+
+      newSocket.on("userStoppedTyping", (stoppedUsername) => {
+        setTypingUsers((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(stoppedUsername);
+          return newSet;
         });
       });
 
       setSocket(newSocket);
+
+      const handleBeforeUnload = () => {
+        if (socketRef.current) {
+          socketRef.current.close();
+        }
+      };
+
+      window.addEventListener("beforeunload", handleBeforeUnload);
+
+      return () => {
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+        if (socketRef.current) {
+          socketRef.current.close();
+        }
+      };
     };
 
     connectSocket();
-
-    // Cleanup
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
   }, [roomCode, username, navigate]);
 
-  // ====== Send Message ======
+  // Send message handler
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !socket || !isConnected) return;
-
     const messageToSend = newMessage.trim().substring(0, 1000);
     socket.emit("sendMessage", messageToSend);
     setNewMessage("");
     setIsTyping(false);
     socket.emit("typingStop");
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
   };
 
+  // Typing handler
   const handleTyping = () => {
     if (!socket || !isConnected) return;
     if (!isTyping) {
       setIsTyping(true);
       socket.emit("typingStart");
     }
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       socket.emit("typingStop");
@@ -189,38 +220,50 @@ export default function ChatRoom() {
     }
   };
 
+  // Leave room handler
   const handleLeaveRoom = () => {
-    if (socket) socket.close();
+    if (socket) {
+      socket.close();
+    }
     localStorage.removeItem("username");
     navigate("/");
   };
 
+  // Reconnect handler
   const handleReconnect = () => {
-    if (socketRef.current) socketRef.current.connect();
+    if (socketRef.current) {
+      socketRef.current.connect();
+    }
   };
 
-  // ====== UI Helpers ======
+  // Get typing text
   const getTypingText = () => {
-    const arr = Array.from(typingUsers);
-    if (arr.length === 0) return "";
-    if (arr.length === 1) return `${arr[0]} is typing...`;
-    if (arr.length === 2) return `${arr[0]} and ${arr[1]} are typing...`;
-    return `${arr[0]} and ${arr.length - 1} others are typing...`;
+    const typingArray = Array.from(typingUsers);
+    if (typingArray.length === 0) return "";
+    if (typingArray.length === 1) return `${typingArray[0]} is typing...`;
+    if (typingArray.length === 2)
+      return `${typingArray[0]} and ${typingArray[1]} are typing...`;
+    return `${typingArray[0]} and ${
+      typingArray.length - 1
+    } others are typing...`;
   };
 
-  const formatUserCount = () =>
-    `${users.length} ${users.length === 1 ? "user" : "users"} online`;
+  // Format user count
+  const formatUserCount = () => {
+    return `${users.length} ${users.length === 1 ? "user" : "users"} online`;
+  };
 
-  const renderLoadingSkeletons = () =>
-    Array.from({ length: 5 }).map((_, i) => (
+  // Render loading skeletons
+  const renderLoadingSkeletons = () => {
+    return Array.from({ length: 5 }).map((_, index) => (
       <div
-        key={i}
+        key={index}
         className="message skeleton"
         style={{ height: "60px", marginBottom: "1rem" }}
-      />
+      ></div>
     ));
+  };
 
-  // ====== Render ======
   return (
     <div className="chat-container">
       <div
@@ -242,14 +285,12 @@ export default function ChatRoom() {
           <div className="room-info">
             <h1>Secure Chat Room</h1>
             <div className="room-code">
-              <span className="room-icon">🔒</span>
-              Room: {roomCode}
+              <span className="room-icon">🔒</span> Room: {roomCode}
             </div>
           </div>
           <div className="user-info">
             <div className="user-count">
-              <span className="user-icon">👥</span>
-              {formatUserCount()}
+              <span className="user-icon">👥</span> {formatUserCount()}
             </div>
             <button onClick={handleLeaveRoom} className="leave-btn">
               <span className="leave-icon">🚪</span> Leave Room
@@ -262,8 +303,7 @@ export default function ChatRoom() {
         <div className="messages-section">
           {error && (
             <div className="error-message">
-              <span className="error-icon">⚠️</span>
-              {error}
+              <span className="error-icon">⚠️</span> {error}
               {!isConnected && (
                 <button
                   onClick={handleReconnect}
@@ -373,6 +413,7 @@ export default function ChatRoom() {
           </div>
         </div>
       </div>
+      <div className="developer-credit">Developed by B Sai Praneeth</div>
     </div>
   );
 }
