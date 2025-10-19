@@ -39,11 +39,11 @@ export default function ChatRoom() {
 
     setIsLoading(true);
 
-    const socketUrl = getServerUrl();
+    const socketUrl = "https://private-backend-k0py.onrender.com";
     console.log(`🔗 Connecting to server: ${socketUrl}`);
     setServerInfo(`Connecting to: ${socketUrl.replace("http://", "")}`);
 
-    const newSocket = io(socketUrl, {
+    const newSocket = io("https://private-backend-k0py.onrender.com", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 10,

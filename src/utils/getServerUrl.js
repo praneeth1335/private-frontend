@@ -3,7 +3,6 @@ export const getServerUrl = () => {
   if (envUrl && envUrl !== "auto") {
     return envUrl;
   }
-
   const { hostname, protocol } = window.location;
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     return "http://localhost:5000";
