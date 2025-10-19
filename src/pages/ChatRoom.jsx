@@ -18,12 +18,23 @@ export default function ChatRoom() {
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [serverInfo, setServerInfo] = useState("");
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
 
   const username = localStorage.getItem("username");
+
+  // Theme toggle and persistence
+  useEffect(() => {
+    document.body.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   // Scroll to bottom whenever messages update
   const scrollToBottom = () => {
@@ -220,13 +231,15 @@ export default function ChatRoom() {
     }
   };
 
-  // Leave room handler
+  // Leave room handler with confirmation
   const handleLeaveRoom = () => {
-    if (socket) {
-      socket.close();
+    if (window.confirm("Are you sure you want to leave the room?")) {
+      if (socket) {
+        socket.close();
+      }
+      localStorage.removeItem("username");
+      navigate("/");
     }
-    localStorage.removeItem("username");
-    navigate("/");
   };
 
   // Reconnect handler
@@ -272,13 +285,17 @@ export default function ChatRoom() {
         }`}
       >
         {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
-        {/* <span className="server-info">({serverInfo})</span> */}
+        <span className="server-info">({serverInfo})</span>
         {!isConnected && (
           <button onClick={handleReconnect} className="reconnect-btn">
             Reconnect
           </button>
         )}
       </div>
+
+      <button onClick={toggleTheme} className="theme-toggle-btn">
+        {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+      </button>
 
       <div className="chat-header">
         <div className="header-content">

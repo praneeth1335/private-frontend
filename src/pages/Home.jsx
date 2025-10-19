@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NetworkInfo from "../components/NetworkInfo";
 
@@ -6,7 +6,18 @@ export default function Home() {
   const [username, setUsername] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const navigate = useNavigate();
+
+  // Theme persistence
+  useEffect(() => {
+    document.body.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   const handleJoin = async (e) => {
     e.preventDefault();
@@ -39,6 +50,9 @@ export default function Home() {
 
   return (
     <div className="home-container">
+      <button onClick={toggleTheme} className="theme-toggle-btn">
+        {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+      </button>
       <div className="join-card">
         <h1>🔒 Secure Chat</h1>
         <p className="subtitle">Private, encrypted room conversations</p>
@@ -75,7 +89,13 @@ export default function Home() {
             className={`join-btn ${isLoading ? "loading" : ""}`}
             disabled={isLoading}
           >
-            {isLoading ? "Joining..." : "Join Secure Room"}
+            {isLoading ? (
+              <div className="loading-spinner"></div>
+            ) : (
+              <>
+                <span className="join-icon">🚀</span> Join Secure Room
+              </>
+            )}
           </button>
         </form>
 
