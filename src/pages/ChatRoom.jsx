@@ -272,7 +272,7 @@ export default function ChatRoom() {
         }`}
       >
         {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
-        <span className="server-info">({serverInfo})</span>
+        {/* <span className="server-info">({serverInfo})</span> */}
         {!isConnected && (
           <button onClick={handleReconnect} className="reconnect-btn">
             Reconnect
