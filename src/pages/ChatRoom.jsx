@@ -7,6 +7,7 @@ import { getServerUrl } from "../utils/getServerUrl";
 export default function ChatRoom() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
+
   const [socket, setSocket] = useState(null);
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
@@ -21,184 +22,160 @@ export default function ChatRoom() {
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
+
   const username = localStorage.getItem("username");
 
+  // Scroll to bottom whenever messages update
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useEffect(scrollToBottom, [messages]);
 
+  // Main socket connection effect
   useEffect(() => {
     if (!username) {
       navigate("/");
       return;
     }
 
-    setIsLoading(true);
+    const connectSocket = async () => {
+      setIsLoading(true);
 
-    const socketUrl = "https://private-backend-k0py.onrender.com";
-    console.log(`🔗 Connecting to server: ${socketUrl}`);
-    setServerInfo(`Connecting to: ${socketUrl.replace("http://", "")}`);
+      // ✅ dynamic backend URL
+      const socketUrl = getServerUrl();
+      console.log(`🔗 Connecting to server: ${socketUrl}`);
+      setServerInfo(`Connecting to: ${socketUrl}`);
 
-    const newSocket = io("https://private-backend-k0py.onrender.com", {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-    });
-
-    socketRef.current = newSocket;
-
-    newSocket.on("connect", () => {
-      console.log("✅ Connected to server");
-      setIsConnected(true);
-      setError("");
-      setServerInfo(`Connected to: ${socketUrl.replace("http://", "")}`);
-      setIsLoading(false);
-      newSocket.emit("joinRoom", {
-        username: username,
-        roomCode: roomCode,
-      });
-    });
-
-    newSocket.on("disconnect", (reason) => {
-      console.log("❌ Disconnected from server:", reason);
-      setIsConnected(false);
-      setServerInfo(`Disconnected: ${reason}`);
-
-      if (reason === "io server disconnect") {
-        setError("Server disconnected you. Please refresh the page.");
-      }
-    });
-
-    newSocket.on("connect_error", (error) => {
-      console.error("Connection error:", error);
-
-      let errorMessage = "Failed to connect to chat server. ";
-
-      if (error.message.includes("ECONNREFUSED")) {
-        errorMessage += `Make sure the server is running at ${socketUrl}`;
-      } else if (error.message.includes("timeout")) {
-        errorMessage += "Connection timeout. Check your network.";
-      } else {
-        errorMessage += error.message;
+      // ✅ wake up Render free instance before connecting
+      try {
+        await fetch(`${socketUrl}/health`, { cache: "no-store" });
+        console.log("✅ Backend awake");
+      } catch (err) {
+        console.warn("⚠️ Backend wakeup failed:", err);
       }
 
-      setError(errorMessage);
-      setIsConnected(false);
-      setIsLoading(false);
-    });
-
-    newSocket.on("reconnect_attempt", (attempt) => {
-      console.log(`🔄 Reconnection attempt ${attempt}`);
-      setError(`Reconnecting... (Attempt ${attempt}/10)`);
-    });
-
-    newSocket.on("reconnect", () => {
-      console.log("✅ Reconnected to server");
-      setError("");
-      setIsConnected(true);
-      newSocket.emit("joinRoom", {
-        username: username,
-        roomCode: roomCode,
+      // ✅ establish socket connection
+      const newSocket = io(socketUrl, {
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
       });
-    });
 
-    newSocket.on("reconnect_failed", () => {
-      console.error("❌ Reconnection failed");
-      setError("Failed to reconnect. Please refresh the page.");
-    });
+      socketRef.current = newSocket;
 
-    newSocket.on("error", (errorMsg) => {
-      setError(errorMsg);
-      setTimeout(() => setError(""), 5000);
-    });
+      // ====== Event Listeners ======
+      newSocket.on("connect", () => {
+        console.log("✅ Connected to server");
+        setIsConnected(true);
+        setError("");
+        setServerInfo(`Connected to: ${socketUrl}`);
+        setIsLoading(false);
 
-    newSocket.on("loadMessages", (msgList) => {
-      setMessages(msgList || []);
-      setIsLoading(false);
-    });
-
-    newSocket.on("message", (msgData) => {
-      setMessages((prev) => [...prev, msgData]);
-    });
-
-    newSocket.on("systemMessage", (sysMsg) => {
-      setMessages((prev) => [...prev, sysMsg]);
-    });
-
-    newSocket.on("roomUsers", (userList) => {
-      setUsers(userList || []);
-    });
-
-    newSocket.on("userTyping", (typingUsername) => {
-      setTypingUsers((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(typingUsername);
-        return newSet;
+        newSocket.emit("joinRoom", {
+          username,
+          roomCode,
+        });
       });
-    });
 
-    newSocket.on("userStoppedTyping", (stoppedUsername) => {
-      setTypingUsers((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(stoppedUsername);
-        return newSet;
+      newSocket.on("disconnect", (reason) => {
+        console.log("❌ Disconnected:", reason);
+        setIsConnected(false);
+        setServerInfo(`Disconnected: ${reason}`);
+        if (reason === "io server disconnect") {
+          setError("Server disconnected you. Please refresh the page.");
+        }
       });
-    });
 
-    setSocket(newSocket);
+      newSocket.on("connect_error", (err) => {
+        console.error("Connection error:", err);
+        setError("Failed to connect to chat server. Please retry.");
+        setIsConnected(false);
+        setIsLoading(false);
+      });
 
-    const handleBeforeUnload = () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      newSocket.on("reconnect_attempt", (attempt) => {
+        console.log(`🔄 Reconnection attempt ${attempt}`);
+        setError(`Reconnecting... (Attempt ${attempt}/10)`);
+      });
+
+      newSocket.on("reconnect", () => {
+        console.log("✅ Reconnected");
+        setError("");
+        setIsConnected(true);
+        newSocket.emit("joinRoom", { username, roomCode });
+      });
+
+      newSocket.on("reconnect_failed", () => {
+        console.error("❌ Reconnection failed");
+        setError("Failed to reconnect. Please refresh.");
+      });
+
+      // ====== Message Events ======
+      newSocket.on("loadMessages", (msgs) => {
+        setMessages(msgs || []);
+        setIsLoading(false);
+      });
+
+      newSocket.on("message", (msg) => setMessages((prev) => [...prev, msg]));
+
+      newSocket.on("systemMessage", (msg) =>
+        setMessages((prev) => [...prev, msg])
+      );
+
+      newSocket.on("roomUsers", (list) => setUsers(list || []));
+
+      // ====== Typing Events ======
+      newSocket.on("userTyping", (user) => {
+        setTypingUsers((prev) => new Set(prev).add(user));
+      });
+
+      newSocket.on("userStoppedTyping", (user) => {
+        setTypingUsers((prev) => {
+          const next = new Set(prev);
+          next.delete(user);
+          return next;
+        });
+      });
+
+      setSocket(newSocket);
     };
 
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    connectSocket();
 
+    // Cleanup
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (socketRef.current) {
-        socketRef.current.close();
+        socketRef.current.disconnect();
       }
     };
   }, [roomCode, username, navigate]);
 
+  // ====== Send Message ======
   const handleSendMessage = (e) => {
     e.preventDefault();
-
     if (!newMessage.trim() || !socket || !isConnected) return;
 
     const messageToSend = newMessage.trim().substring(0, 1000);
     socket.emit("sendMessage", messageToSend);
     setNewMessage("");
-
     setIsTyping(false);
     socket.emit("typingStop");
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   };
 
   const handleTyping = () => {
     if (!socket || !isConnected) return;
-
     if (!isTyping) {
       setIsTyping(true);
       socket.emit("typingStart");
     }
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       socket.emit("typingStop");
@@ -213,44 +190,37 @@ export default function ChatRoom() {
   };
 
   const handleLeaveRoom = () => {
-    if (socket) {
-      socket.close();
-    }
+    if (socket) socket.close();
     localStorage.removeItem("username");
     navigate("/");
   };
 
   const handleReconnect = () => {
-    if (socketRef.current) {
-      socketRef.current.connect();
-    }
+    if (socketRef.current) socketRef.current.connect();
   };
 
+  // ====== UI Helpers ======
   const getTypingText = () => {
-    const typingArray = Array.from(typingUsers);
-    if (typingArray.length === 0) return "";
-    if (typingArray.length === 1) return `${typingArray[0]} is typing...`;
-    if (typingArray.length === 2)
-      return `${typingArray[0]} and ${typingArray[1]} are typing...`;
-    return `${typingArray[0]} and ${
-      typingArray.length - 1
-    } others are typing...`;
+    const arr = Array.from(typingUsers);
+    if (arr.length === 0) return "";
+    if (arr.length === 1) return `${arr[0]} is typing...`;
+    if (arr.length === 2) return `${arr[0]} and ${arr[1]} are typing...`;
+    return `${arr[0]} and ${arr.length - 1} others are typing...`;
   };
 
-  const formatUserCount = () => {
-    return `${users.length} ${users.length === 1 ? "user" : "users"} online`;
-  };
+  const formatUserCount = () =>
+    `${users.length} ${users.length === 1 ? "user" : "users"} online`;
 
-  const renderLoadingSkeletons = () => {
-    return Array.from({ length: 5 }).map((_, index) => (
+  const renderLoadingSkeletons = () =>
+    Array.from({ length: 5 }).map((_, i) => (
       <div
-        key={index}
+        key={i}
         className="message skeleton"
         style={{ height: "60px", marginBottom: "1rem" }}
-      ></div>
+      />
     ));
-  };
 
+  // ====== Render ======
   return (
     <div className="chat-container">
       <div
@@ -282,8 +252,7 @@ export default function ChatRoom() {
               {formatUserCount()}
             </div>
             <button onClick={handleLeaveRoom} className="leave-btn">
-              <span className="leave-icon">🚪</span>
-              Leave Room
+              <span className="leave-icon">🚪</span> Leave Room
             </button>
           </div>
         </div>
@@ -363,8 +332,7 @@ export default function ChatRoom() {
                   <div className="loading-spinner"></div>
                 ) : (
                   <>
-                    <span className="send-icon">✈️</span>
-                    Send
+                    <span className="send-icon">✈️</span> Send
                   </>
                 )}
               </button>
@@ -384,17 +352,15 @@ export default function ChatRoom() {
                 <p>No users online</p>
               </div>
             ) : (
-              users.map((user, index) => (
-                <div key={`${user}-${index}`} className="user-item">
+              users.map((u, i) => (
+                <div key={`${u}-${i}`} className="user-item">
                   <div className="user-avatar">
-                    {user.charAt(0).toUpperCase()}
+                    {u.charAt(0).toUpperCase()}
                     <div className="status-indicator"></div>
                   </div>
                   <span className="user-name">
-                    {user}
-                    {user === username && (
-                      <span className="you-badge">You</span>
-                    )}
+                    {u}
+                    {u === username && <span className="you-badge">You</span>}
                   </span>
                 </div>
               ))
@@ -402,8 +368,7 @@ export default function ChatRoom() {
           </div>
           <div className="sidebar-footer">
             <div className="security-badge">
-              <span className="lock-icon">🔒</span>
-              End-to-End Encrypted
+              <span className="lock-icon">🔒</span> End-to-End Encrypted
             </div>
           </div>
         </div>
