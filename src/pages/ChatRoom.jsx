@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import Message from "../components/Message";
 import { getServerUrl } from "../utils/getServerUrl";
+import { useDropzone } from "react-dropzone";
 
 export default function ChatRoom() {
   const { roomCode } = useParams();
@@ -19,6 +20,7 @@ export default function ChatRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [serverInfo, setServerInfo] = useState("");
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [uploadProgress, setUploadProgress] = useState(null);
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -26,7 +28,7 @@ export default function ChatRoom() {
 
   const username = localStorage.getItem("username");
 
-  // Theme toggle and persistence
+  // Theme sync
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
@@ -36,14 +38,14 @@ export default function ChatRoom() {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  // Scroll to bottom whenever messages update
+  // Scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(scrollToBottom, [messages]);
 
-  // Main socket connection effect
+  // Socket connection
   useEffect(() => {
     if (!username) {
       navigate("/");
@@ -53,12 +55,10 @@ export default function ChatRoom() {
     const connectSocket = async () => {
       setIsLoading(true);
 
-      // Dynamic backend URL
       const socketUrl = getServerUrl();
       console.log(`🔗 Connecting to server: ${socketUrl}`);
       setServerInfo(`Connecting to: ${socketUrl}`);
 
-      // Wake up Render free instance before connecting
       try {
         await fetch(`${socketUrl}/health`, { cache: "no-store" });
         console.log("✅ Backend awake");
@@ -66,7 +66,6 @@ export default function ChatRoom() {
         console.warn("⚠️ Backend wakeup failed:", err);
       }
 
-      // Establish socket connection
       const newSocket = io(socketUrl, {
         transports: ["websocket", "polling"],
         reconnection: true,
@@ -77,8 +76,8 @@ export default function ChatRoom() {
       });
 
       socketRef.current = newSocket;
+      window.socket = newSocket; // For Message.jsx access
 
-      // Event Listeners
       newSocket.on("connect", () => {
         console.log("✅ Connected to server");
         setIsConnected(true);
@@ -173,6 +172,10 @@ export default function ChatRoom() {
         });
       });
 
+      newSocket.on("fileDeleted", ({ key }) => {
+        setMessages((prev) => prev.filter((msg) => msg.fileKey !== key));
+      });
+
       setSocket(newSocket);
 
       const handleBeforeUnload = () => {
@@ -194,7 +197,6 @@ export default function ChatRoom() {
     connectSocket();
   }, [roomCode, username, navigate]);
 
-  // Send message handler
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !socket || !isConnected) return;
@@ -208,7 +210,6 @@ export default function ChatRoom() {
     }
   };
 
-  // Typing handler
   const handleTyping = () => {
     if (!socket || !isConnected) return;
     if (!isTyping) {
@@ -231,25 +232,93 @@ export default function ChatRoom() {
     }
   };
 
-  // Leave room handler with confirmation
+  const onDrop = useCallback(
+    (acceptedFiles) => {
+      acceptedFiles.forEach((file) => {
+        if (!socket || !isConnected) {
+          alert("Not connected to server");
+          return;
+        }
+
+        const fileType = file.type || "application/octet-stream";
+        const extension = file.name.split(".").pop().toLowerCase();
+        socket.emit("requestUploadUrl", {
+          filename: file.name,
+          fileType: fileType,
+        });
+
+        socket.once("uploadUrl", async ({ presignedUrl, fileUrl, key }) => {
+          try {
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", presignedUrl, true);
+            xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                setUploadProgress({ file: file.name, percent });
+              }
+            };
+            xhr.setRequestHeader("Content-Type", fileType);
+            xhr.onload = () => {
+              if (xhr.status === 200) {
+                socket.emit("fileUploaded", {
+                  fileUrl,
+                  filename: file.name,
+                  key,
+                  extension,
+                });
+                console.log(`📤 File uploaded: ${file.name}`);
+                setTimeout(() => setUploadProgress(null), 1000);
+              } else {
+                console.error("File upload failed:", xhr.statusText);
+                setError("Failed to upload file");
+              }
+            };
+            xhr.onerror = () => {
+              console.error("File upload error");
+              setError("Failed to upload file");
+              setUploadProgress(null);
+            };
+            xhr.send(file);
+          } catch (err) {
+            console.error("File upload error:", err);
+            setError("Failed to upload file");
+            setUploadProgress(null);
+          }
+        });
+      });
+    },
+    [socket, isConnected]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "image/*": [".jpg", ".jpeg", ".png", ".gif"],
+      "application/pdf": [".pdf"],
+      "application/msword": [".doc"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
+      "text/plain": [".txt"],
+      "text/x-javascript": [".js"],
+      "audio/mpegurl": [".m3u"],
+      "application/octet-stream": [".m3"],
+    },
+    multiple: true,
+    maxSize: 10 * 1024 * 1024, // 10MB limit
+  });
+
   const handleLeaveRoom = () => {
-    if (window.confirm("Are you sure you want to leave the room?")) {
-      if (socket) {
-        socket.close();
-      }
+    if (window.confirm("Are you certain you want to leave the room?")) {
+      if (socket) socket.close();
       localStorage.removeItem("username");
       navigate("/");
     }
   };
 
-  // Reconnect handler
   const handleReconnect = () => {
-    if (socketRef.current) {
-      socketRef.current.connect();
-    }
+    if (socketRef.current) socketRef.current.connect();
   };
 
-  // Get typing text
   const getTypingText = () => {
     const typingArray = Array.from(typingUsers);
     if (typingArray.length === 0) return "";
@@ -261,21 +330,17 @@ export default function ChatRoom() {
     } others are typing...`;
   };
 
-  // Format user count
-  const formatUserCount = () => {
-    return `${users.length} ${users.length === 1 ? "user" : "users"} online`;
-  };
+  const formatUserCount = () =>
+    `${users.length} ${users.length === 1 ? "user" : "users"} online`;
 
-  // Render loading skeletons
-  const renderLoadingSkeletons = () => {
-    return Array.from({ length: 5 }).map((_, index) => (
+  const renderLoadingSkeletons = () =>
+    Array.from({ length: 5 }).map((_, index) => (
       <div
         key={index}
         className="message skeleton"
         style={{ height: "60px", marginBottom: "1rem" }}
-      ></div>
+      />
     ));
-  };
 
   return (
     <div className="chat-container">
@@ -344,7 +409,12 @@ export default function ChatRoom() {
                 </div>
               ) : (
                 messages.map((msg) => (
-                  <Message key={msg.id} message={msg} currentUser={username} />
+                  <Message
+                    key={msg.id}
+                    message={msg}
+                    currentUser={username}
+                    socket={socket}
+                  />
                 ))
               )}
               <div ref={messagesEndRef} />
@@ -373,10 +443,10 @@ export default function ChatRoom() {
                     handleTyping();
                   }}
                   onKeyPress={handleKeyPress}
-                  placeholder="Type a secure message... (Press Enter to send, Shift+Enter for new line)"
+                  placeholder="Type a message or drop files here..."
                   maxLength={1000}
                   disabled={!isConnected || isLoading}
-                  rows="2"
+                  rows="1"
                 />
                 <div className="message-counter">{newMessage.length}/1000</div>
               </div>
@@ -385,15 +455,32 @@ export default function ChatRoom() {
                 className="send-btn"
                 disabled={!newMessage.trim() || !isConnected || isLoading}
               >
-                {isLoading ? (
-                  <div className="loading-spinner"></div>
-                ) : (
-                  <>
-                    <span className="send-icon">✈️</span> Send
-                  </>
-                )}
+                <span className="send-icon">✈️</span> Send
               </button>
             </form>
+            <div
+              {...getRootProps({
+                className: `dropzone ${isDragActive ? "active" : ""}`,
+              })}
+            >
+              <input {...getInputProps()} />
+              <p>
+                {isDragActive
+                  ? "Drop files here..."
+                  : "Drag & drop PDFs, images, docs, or code files"}
+              </p>
+              {uploadProgress && (
+                <div className="upload-progress">
+                  <div
+                    className="upload-progress-bar"
+                    style={{ width: `${uploadProgress.percent}%` }}
+                  ></div>
+                  <div className="upload-progress-text">
+                    Uploading {uploadProgress.file}: {uploadProgress.percent}%
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -409,15 +496,17 @@ export default function ChatRoom() {
                 <p>No users online</p>
               </div>
             ) : (
-              users.map((u, i) => (
-                <div key={`${u}-${i}`} className="user-item">
+              users.map((user, index) => (
+                <div key={`${user}-${index}`} className="user-item">
                   <div className="user-avatar">
-                    {u.charAt(0).toUpperCase()}
+                    {user.charAt(0).toUpperCase()}
                     <div className="status-indicator"></div>
                   </div>
                   <span className="user-name">
-                    {u}
-                    {u === username && <span className="you-badge">You</span>}
+                    {user}
+                    {user === username && (
+                      <span className="you-badge">You</span>
+                    )}
                   </span>
                 </div>
               ))
