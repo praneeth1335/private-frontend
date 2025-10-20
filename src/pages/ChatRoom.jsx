@@ -21,10 +21,13 @@ export default function ChatRoom() {
   const [serverInfo, setServerInfo] = useState("");
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
+  const connectionTimeoutRef = useRef(null);
 
   const username = localStorage.getItem("username");
 
@@ -34,16 +37,68 @@ export default function ChatRoom() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   // Scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-
   useEffect(scrollToBottom, [messages]);
+
+  // Sidebar overlay effect and responsive behavior
+  useEffect(() => {
+    document.body.classList.toggle("sidebar-open", isSidebarOpen);
+  }, [isSidebarOpen]);
+
+  // Handle window resize for sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      // Auto-close sidebar on mobile when switching to desktop
+      if (window.innerWidth > 768 && !isSidebarOpen) {
+        setIsSidebarOpen(true);
+      }
+      // Auto-open sidebar on desktop, close on mobile
+      if (window.innerWidth <= 768 && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // Set initial sidebar state based on screen size
+    if (window.innerWidth > 768 && !isSidebarOpen) {
+      setIsSidebarOpen(true);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isSidebarOpen]);
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  // Connection status display logic
+  useEffect(() => {
+    if (isConnected !== null) {
+      setShowConnectionStatus(true);
+
+      // Clear any existing timeout
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
+
+      // Hide connection status after 2 seconds
+      connectionTimeoutRef.current = setTimeout(() => {
+        setShowConnectionStatus(false);
+      }, 2000);
+    }
+
+    return () => {
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
+    };
+  }, [isConnected]);
 
   // Socket connection
   useEffect(() => {
@@ -54,7 +109,6 @@ export default function ChatRoom() {
 
     const connectSocket = async () => {
       setIsLoading(true);
-
       const socketUrl = getServerUrl();
       console.log(`🔗 Connecting to server: ${socketUrl}`);
       setServerInfo(`Connecting to: ${socketUrl}`);
@@ -76,7 +130,7 @@ export default function ChatRoom() {
       });
 
       socketRef.current = newSocket;
-      window.socket = newSocket; // For Message.jsx access
+      window.socket = newSocket;
 
       newSocket.on("connect", () => {
         console.log("✅ Connected to server");
@@ -191,6 +245,9 @@ export default function ChatRoom() {
         if (socketRef.current) {
           socketRef.current.close();
         }
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+        }
       };
     };
 
@@ -304,7 +361,7 @@ export default function ChatRoom() {
       "application/octet-stream": [".m3"],
     },
     multiple: true,
-    maxSize: 10 * 1024 * 1024, // 10MB limit
+    maxSize: 10 * 1024 * 1024,
   });
 
   const handleLeaveRoom = () => {
@@ -344,23 +401,33 @@ export default function ChatRoom() {
 
   return (
     <div className="chat-container">
-      <div
-        className={`connection-status ${
-          isConnected ? "connected" : "disconnected"
-        }`}
-      >
-        {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
-        <span className="server-info">({serverInfo})</span>
-        {!isConnected && (
-          <button onClick={handleReconnect} className="reconnect-btn">
-            Reconnect
-          </button>
-        )}
-      </div>
+      {/* Connection Status - Now appears briefly then disappears */}
+      {showConnectionStatus && (
+        <div
+          className={`connection-status ${
+            isConnected ? "connected" : "disconnected"
+          }`}
+        >
+          {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
+          <span className="server-info">({serverInfo})</span>
+          {!isConnected && (
+            <button onClick={handleReconnect} className="reconnect-btn">
+              Reconnect
+            </button>
+          )}
+        </div>
+      )}
 
       <button onClick={toggleTheme} className="theme-toggle-btn">
         {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
       </button>
+
+      {/* Always show toggle button on mobile/tablet */}
+      {window.innerWidth <= 768 && (
+        <button onClick={toggleSidebar} className="toggle-users-btn">
+          {isSidebarOpen ? "✕" : "👥"}
+        </button>
+      )}
 
       <div className="chat-header">
         <div className="header-content">
@@ -484,10 +551,15 @@ export default function ChatRoom() {
           </div>
         </div>
 
-        <div className="users-sidebar">
+        <div className={`users-sidebar ${isSidebarOpen ? "open" : ""}`}>
           <div className="sidebar-header">
             <h3>Online Users</h3>
             <div className="user-count-badge">{users.length}</div>
+            {window.innerWidth <= 768 && (
+              <button onClick={toggleSidebar} className="close-sidebar-btn">
+                ✕
+              </button>
+            )}
           </div>
           <div className="users-list">
             {users.length === 0 ? (
@@ -519,6 +591,7 @@ export default function ChatRoom() {
           </div>
         </div>
       </div>
+
       <div className="developer-credit">Developed by B Sai Praneeth</div>
     </div>
   );
