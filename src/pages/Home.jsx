@@ -48,6 +48,10 @@ export default function Home() {
     }
   };
 
+  const wakeUpServer = () => {
+    window.open("https://private-backend-k0py.onrender.com/", "_blank");
+  };
+
   return (
     <div className="home-container">
       <button onClick={toggleTheme} className="theme-toggle-btn">
@@ -56,6 +60,32 @@ export default function Home() {
       <div className="join-card">
         <h1>🔒 Secure Chat</h1>
         <p className="subtitle">Private, encrypted room conversations</p>
+
+        {/* Server Wake-up Notice */}
+        <div className="server-wakeup-notice">
+          <div className="server-wakeup-icon">⚠️</div>
+          <div className="server-wakeup-content">
+            <h3>Server May Be Asleep</h3>
+            <p>
+              The backend server might be in sleep mode. If you see "Cannot GET
+              /" or connection issues, please wake it up first!
+            </p>
+            <div className="server-wakeup-instructions">
+              <p>
+                <strong>Instructions:</strong>
+              </p>
+              <ol>
+                <li>Click the button below to wake up the server</li>
+                <li>Wait until you see "Cannot GET /" page</li>
+                <li>Come back here and join your chat room</li>
+                <li>Server stays active for 15 minutes after waking</li>
+              </ol>
+            </div>
+            <button onClick={wakeUpServer} className="wake-up-server-btn">
+              🚀 Wake Up Server Now
+            </button>
+          </div>
+        </div>
 
         <form onSubmit={handleJoin} className="input-group">
           <div className="input-field">
