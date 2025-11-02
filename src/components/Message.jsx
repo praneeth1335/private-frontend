@@ -87,6 +87,37 @@ export default function Message({
       const extension = filename.split(".").pop().toLowerCase();
       const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(extension);
 
+      // **MODIFIED:** This function now fetches the file as a blob
+      // to force a download instead of opening in a new tab.
+      const handleDownload = async () => {
+        if (!downloadUrl) return;
+
+        try {
+          // 1. Fetch the file
+          const response = await fetch(downloadUrl);
+          if (!response.ok) throw new Error("Network response was not ok");
+          const blob = await response.blob();
+
+          // 2. Create a local object URL for the blob
+          const blobUrl = window.URL.createObjectURL(blob);
+
+          // 3. Create a temporary link to trigger the download
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.setAttribute("download", filename || "download");
+          document.body.appendChild(link);
+          link.click();
+
+          // 4. Clean up the temporary link and object URL
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+          console.error("Download failed:", error);
+          // Fallback to original behavior if blob download fails
+          window.open(downloadUrl, "_blank");
+        }
+      };
+
       return (
         <>
           <div className="file-preview">
@@ -104,7 +135,7 @@ export default function Message({
               <button
                 className="btn btn-small btn-secondary"
                 disabled={!downloadUrl}
-                onClick={() => window.open(downloadUrl, "_blank")}
+                onClick={handleDownload} // <-- MODIFIED
                 title="Download file"
               >
                 {downloadUrl ? "Download" : "Loading..."}
@@ -130,9 +161,17 @@ export default function Message({
               className="file-image"
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
+              // **MODIFIED:** Added inline styles to constrain image size
+              // without touching styles.css
               style={{
                 opacity: imageLoaded ? 1 : 0,
                 transition: "opacity 0.3s ease",
+                maxWidth: "400px",
+                maxHeight: "400px",
+                width: "100%",
+                objectFit: "cover",
+                marginTop: "var(--space-sm)",
+                borderRadius: "var(--radius-md)",
               }}
             />
           )}
