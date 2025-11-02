@@ -131,7 +131,7 @@ export default function Home() {
         <div className="server-status">
           <div className="status-indicator">
             <div className="status-dot"></div>
-            <span>Server Ready</span>
+            <span>Server may be at sleep, Wake it up!</span>
           </div>
           <button
             onClick={wakeUpServer}
