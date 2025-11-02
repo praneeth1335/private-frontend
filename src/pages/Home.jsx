@@ -111,21 +111,20 @@ export default function Home() {
       <div className="home-card">
         <div className="home-header">
           <div className="home-logo">💬</div>
-          <h1 className="home-title">Premium Chat</h1>
-          <p className="home-subtitle">
-            Where conversations flow like peaceful rivers
-          </p>
+          <h1 className="home-title">The Vanishing Point</h1>
+          <p className="home-subtitle">Where every word fades into silence</p>
         </div>
 
         <div className="inspirational-quotes">
           <div className="quote-slide active">
-            "Connect seamlessly, communicate freely"
+            Conversations that disappear — just like they should.
           </div>
           <div className="quote-slide">
-            "Your thoughts deserve a beautiful space"
+            No history. No trace. Just presence.
           </div>
+          <div className="quote-slide">Talk freely. Leave nothing behind.</div>
           <div className="quote-slide">
-            "Simple, secure, and serene conversations"
+            The safest chat is the one that vanishes.
           </div>
         </div>
 
