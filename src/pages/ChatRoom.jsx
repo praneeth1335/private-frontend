@@ -18,89 +18,40 @@ export default function ChatRoom() {
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [serverInfo, setServerInfo] = useState("");
-  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [theme, setTheme] = useState(
+    localStorage.getItem("premium-chat-theme") || "dark"
+  );
   const [uploadProgress, setUploadProgress] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 820);
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
-  const connectionTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const username = localStorage.getItem("username");
 
-  // Theme sync
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
-    localStorage.setItem("theme", theme);
+    localStorage.setItem("premium-chat-theme", theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
-
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
-  useEffect(scrollToBottom, [messages]);
 
-  // Sidebar overlay effect and responsive behavior
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
   useEffect(() => {
-    document.body.classList.toggle("sidebar-open", isSidebarOpen);
-  }, [isSidebarOpen]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
-  // Handle window resize for sidebar
-  useEffect(() => {
-    const handleResize = () => {
-      // Auto-close sidebar on mobile when switching to desktop
-      if (window.innerWidth > 768 && !isSidebarOpen) {
-        setIsSidebarOpen(true);
-      }
-      // Auto-open sidebar on desktop, close on mobile
-      if (window.innerWidth <= 768 && isSidebarOpen) {
-        setIsSidebarOpen(false);
-      }
-    };
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => !prev);
+  };
 
-    window.addEventListener("resize", handleResize);
-
-    // Set initial sidebar state based on screen size
-    if (window.innerWidth > 768 && !isSidebarOpen) {
-      setIsSidebarOpen(true);
-    }
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [isSidebarOpen]);
-
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-
-  // Connection status display logic
-  useEffect(() => {
-    if (isConnected !== null) {
-      setShowConnectionStatus(true);
-
-      // Clear any existing timeout
-      if (connectionTimeoutRef.current) {
-        clearTimeout(connectionTimeoutRef.current);
-      }
-
-      // Hide connection status after 2 seconds
-      connectionTimeoutRef.current = setTimeout(() => {
-        setShowConnectionStatus(false);
-      }, 2000);
-    }
-
-    return () => {
-      if (connectionTimeoutRef.current) {
-        clearTimeout(connectionTimeoutRef.current);
-      }
-    };
-  }, [isConnected]);
-
-  // Socket connection
   useEffect(() => {
     if (!username) {
       navigate("/");
@@ -110,71 +61,65 @@ export default function ChatRoom() {
     const connectSocket = async () => {
       setIsLoading(true);
       const socketUrl = getServerUrl();
-      console.log(`🔗 Connecting to server: ${socketUrl}`);
-      setServerInfo(`Connecting to: ${socketUrl}`);
 
       try {
-        await fetch(`${socketUrl}/health`, { cache: "no-store" });
-        console.log("✅ Backend awake");
+        await fetch(`${socketUrl}/health`, {
+          signal: AbortSignal.timeout(5000),
+        });
       } catch (err) {
-        console.warn("⚠️ Backend wakeup failed:", err);
+        console.warn("Server health check failed:", err);
       }
 
       const newSocket = io(socketUrl, {
         transports: ["websocket", "polling"],
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: 15,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000,
+        timeout: 15000,
       });
 
       socketRef.current = newSocket;
-      window.socket = newSocket;
 
       newSocket.on("connect", () => {
-        console.log("✅ Connected to server");
         setIsConnected(true);
         setError("");
-        setServerInfo(`Connected to: ${socketUrl}`);
         setIsLoading(false);
+
         newSocket.emit("joinRoom", {
           username: username,
           roomCode: roomCode,
         });
+
+        showToast("Connected to chat", "success");
       });
 
       newSocket.on("disconnect", (reason) => {
-        console.log("❌ Disconnected from server:", reason);
         setIsConnected(false);
-        setServerInfo(`Disconnected: ${reason}`);
         if (reason === "io server disconnect") {
-          setError("Server disconnected you. Please refresh the page.");
+          setError("Server disconnected. Please refresh.");
         }
       });
 
       newSocket.on("connect_error", (error) => {
-        console.error("Connection error:", error);
-        let errorMessage = "Failed to connect to chat server. ";
+        let errorMessage = "Connection failed. ";
         if (error.message.includes("ECONNREFUSED")) {
-          errorMessage += `Make sure the server is running at ${socketUrl}`;
+          errorMessage += "Server unavailable.";
         } else if (error.message.includes("timeout")) {
-          errorMessage += "Connection timeout. Check your network.";
+          errorMessage += "Request timeout.";
         } else {
           errorMessage += error.message;
         }
+
         setError(errorMessage);
         setIsConnected(false);
         setIsLoading(false);
       });
 
       newSocket.on("reconnect_attempt", (attempt) => {
-        console.log(`🔄 Reconnection attempt ${attempt}`);
-        setError(`Reconnecting... (Attempt ${attempt}/10)`);
+        setError(`Reconnecting... (${attempt}/15)`);
       });
 
       newSocket.on("reconnect", () => {
-        console.log("✅ Reconnected to server");
         setError("");
         setIsConnected(true);
         newSocket.emit("joinRoom", {
@@ -184,13 +129,7 @@ export default function ChatRoom() {
       });
 
       newSocket.on("reconnect_failed", () => {
-        console.error("❌ Reconnection failed");
-        setError("Failed to reconnect. Please refresh the page.");
-      });
-
-      newSocket.on("error", (errorMsg) => {
-        setError(errorMsg);
-        setTimeout(() => setError(""), 5000);
+        setError("Reconnection failed. Please refresh.");
       });
 
       newSocket.on("loadMessages", (msgList) => {
@@ -211,11 +150,7 @@ export default function ChatRoom() {
       });
 
       newSocket.on("userTyping", (typingUsername) => {
-        setTypingUsers((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(typingUsername);
-          return newSet;
-        });
+        setTypingUsers((prev) => new Set([...prev, typingUsername]));
       });
 
       newSocket.on("userStoppedTyping", (stoppedUsername) => {
@@ -232,21 +167,9 @@ export default function ChatRoom() {
 
       setSocket(newSocket);
 
-      const handleBeforeUnload = () => {
-        if (socketRef.current) {
-          socketRef.current.close();
-        }
-      };
-
-      window.addEventListener("beforeunload", handleBeforeUnload);
-
       return () => {
-        window.removeEventListener("beforeunload", handleBeforeUnload);
         if (socketRef.current) {
           socketRef.current.close();
-        }
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
         }
       };
     };
@@ -256,31 +179,39 @@ export default function ChatRoom() {
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socket || !isConnected) return;
+    if (!newMessage.trim() || !socket || !isConnected) {
+      showToast("Cannot send message", "error");
+      return;
+    }
+
     const messageToSend = newMessage.trim().substring(0, 1000);
     socket.emit("sendMessage", messageToSend);
     setNewMessage("");
     setIsTyping(false);
     socket.emit("typingStop");
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
   };
 
-  const handleTyping = () => {
+  const handleTyping = useCallback(() => {
     if (!socket || !isConnected) return;
+
     if (!isTyping) {
       setIsTyping(true);
       socket.emit("typingStart");
     }
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       socket.emit("typingStop");
     }, 1000);
-  };
+  }, [socket, isConnected, isTyping]);
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -293,12 +224,13 @@ export default function ChatRoom() {
     (acceptedFiles) => {
       acceptedFiles.forEach((file) => {
         if (!socket || !isConnected) {
-          alert("Not connected to server");
+          showToast("Not connected to server", "error");
           return;
         }
 
         const fileType = file.type || "application/octet-stream";
         const extension = file.name.split(".").pop().toLowerCase();
+
         socket.emit("requestUploadUrl", {
           filename: file.name,
           fileType: fileType,
@@ -308,12 +240,14 @@ export default function ChatRoom() {
           try {
             const xhr = new XMLHttpRequest();
             xhr.open("PUT", presignedUrl, true);
+
             xhr.upload.onprogress = (event) => {
               if (event.lengthComputable) {
                 const percent = Math.round((event.loaded / event.total) * 100);
                 setUploadProgress({ file: file.name, percent });
               }
             };
+
             xhr.setRequestHeader("Content-Type", fileType);
             xhr.onload = () => {
               if (xhr.status === 200) {
@@ -323,22 +257,22 @@ export default function ChatRoom() {
                   key,
                   extension,
                 });
-                console.log(`📤 File uploaded: ${file.name}`);
+                showToast("File uploaded successfully", "success");
                 setTimeout(() => setUploadProgress(null), 1000);
               } else {
-                console.error("File upload failed:", xhr.statusText);
-                setError("Failed to upload file");
+                showToast("File upload failed", "error");
+                setUploadProgress(null);
               }
             };
+
             xhr.onerror = () => {
-              console.error("File upload error");
-              setError("Failed to upload file");
+              showToast("File upload failed", "error");
               setUploadProgress(null);
             };
+
             xhr.send(file);
           } catch (err) {
-            console.error("File upload error:", err);
-            setError("Failed to upload file");
+            showToast("File upload failed", "error");
             setUploadProgress(null);
           }
         });
@@ -350,30 +284,38 @@ export default function ChatRoom() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "image/*": [".jpg", ".jpeg", ".png", ".gif"],
-      "application/pdf": [".pdf"],
-      "application/msword": [".doc"],
+      "image/jpeg": [],
+      "image/png": [],
+      "image/gif": [],
+      "image/webp": [],
+      "application/pdf": [],
+      "application/msword": [],
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        [".docx"],
-      "text/plain": [".txt"],
-      "text/x-javascript": [".js"],
-      "audio/mpegurl": [".m3u"],
-      "application/octet-stream": [".m3"],
+        [],
+      "text/plain": [],
+      "application/json": [],
+      "application/zip": [],
     },
     multiple: true,
-    maxSize: 10 * 1024 * 1024,
+    maxSize: 25 * 1024 * 1024,
+    noClick: true,
   });
 
   const handleLeaveRoom = () => {
-    if (window.confirm("Are you certain you want to leave the room?")) {
-      if (socket) socket.close();
+    if (window.confirm("Are you sure you want to leave this chat room?")) {
+      if (socket) {
+        socket.emit("leaveRoom");
+        socket.close();
+      }
       localStorage.removeItem("username");
       navigate("/");
     }
   };
 
   const handleReconnect = () => {
-    if (socketRef.current) socketRef.current.connect();
+    if (socketRef.current) {
+      socketRef.current.connect();
+    }
   };
 
   const getTypingText = () => {
@@ -387,120 +329,181 @@ export default function ChatRoom() {
     } others are typing...`;
   };
 
-  const formatUserCount = () =>
-    `${users.length} ${users.length === 1 ? "user" : "users"} online`;
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(roomCode).then(() => {
+      showToast("Room code copied to clipboard", "success");
+    });
+  };
+
+  const showToast = (message, type = "info") => {
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+      <span class="toast-icon">${
+        type === "error" ? "⚠️" : type === "success" ? "✅" : "ℹ️"
+      }</span>
+      <span class="toast-content">${message}</span>
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(-10px)";
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 3000);
+  };
 
   const renderLoadingSkeletons = () =>
     Array.from({ length: 5 }).map((_, index) => (
       <div
         key={index}
-        className="message skeleton"
-        style={{ height: "60px", marginBottom: "1rem" }}
-      />
+        className={`skeleton skeleton-message ${
+          index % 2 === 0 ? "other" : "self"
+        }`}
+      >
+        <div className="skeleton-avatar"></div>
+        <div style={{ flex: 1 }}>
+          <div className="skeleton-line short"></div>
+          <div className="skeleton-line medium"></div>
+          <div className="skeleton-line long"></div>
+        </div>
+      </div>
     ));
 
   return (
     <div className="chat-container">
-      {/* Connection Status - Now appears briefly then disappears */}
-      {showConnectionStatus && (
-        <div
-          className={`connection-status ${
-            isConnected ? "connected" : "disconnected"
-          }`}
-        >
-          {isConnected ? "🟢 Connected" : "🔴 Disconnected"}
-          <span className="server-info">({serverInfo})</span>
+      <div
+        className={`sidebar-backdrop ${isSidebarOpen ? "open" : ""}`}
+        onClick={toggleSidebar}
+      ></div>
+
+      {!isConnected && (
+        <div className="connection-status">
+          <div
+            className={`status-indicator ${isConnected ? "" : "offline"}`}
+          ></div>
+          <span>{isConnected ? "Connected" : "Disconnected"}</span>
           {!isConnected && (
-            <button onClick={handleReconnect} className="reconnect-btn">
+            <button
+              onClick={handleReconnect}
+              className="btn btn-small reconnect-btn"
+            >
               Reconnect
             </button>
           )}
         </div>
       )}
 
-      <button onClick={toggleTheme} className="theme-toggle-btn">
-        {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-      </button>
-
-      {/* Always show toggle button on mobile/tablet */}
-      {window.innerWidth <= 768 && (
-        <button onClick={toggleSidebar} className="toggle-users-btn">
-          {isSidebarOpen ? "✕" : "👥"}
-        </button>
-      )}
-
       <div className="chat-header">
-        <div className="header-content">
+        <div className="header-left">
           <div className="room-info">
-            <h1>Secure Chat Room</h1>
-            <div className="room-code">
-              <span className="room-icon">🔒</span> Room: {roomCode}
+            <div className="room-title">Premium Chat</div>
+            <div className="room-sub">Real-time messaging</div>
+            <div className="room-code-wrapper">
+              <div className="room-code" onClick={copyRoomCode}>
+                <span>{roomCode}</span>
+                <span>📋</span>
+              </div>
             </div>
           </div>
-          <div className="user-info">
-            <div className="user-count">
-              <span className="user-icon">👥</span> {formatUserCount()}
-            </div>
-            <button onClick={handleLeaveRoom} className="leave-btn">
-              <span className="leave-icon">🚪</span> Leave Room
-            </button>
+        </div>
+
+        <div className="header-right">
+          <div className="user-count">
+            <span>{users.length} online</span>
           </div>
+
+          <button
+            onClick={toggleTheme}
+            className="btn btn-icon theme-toggle-btn"
+          >
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
+
+          <button
+            onClick={toggleSidebar}
+            className="btn btn-icon toggle-users-btn"
+          >
+            👥
+          </button>
+
+          <button onClick={handleLeaveRoom} className="btn btn-ghost leave-btn">
+            Leave
+          </button>
         </div>
       </div>
 
-      <div className="chat-main">
-        <div className="messages-section">
-          {error && (
-            <div className="error-message">
-              <span className="error-icon">⚠️</span> {error}
-              {!isConnected && (
-                <button
-                  onClick={handleReconnect}
-                  className="reconnect-btn-inline"
-                >
-                  Reconnect
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className="messages-container">
-            <div className="messages-list">
-              {isLoading ? (
-                renderLoadingSkeletons()
-              ) : messages.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">💬</div>
-                  <h3>No messages yet</h3>
-                  <p>Start the conversation by sending a message!</p>
-                </div>
-              ) : (
-                messages.map((msg) => (
-                  <Message
-                    key={msg.id}
-                    message={msg}
-                    currentUser={username}
-                    socket={socket}
-                  />
-                ))
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+      <div className="messages-section">
+        {error && (
+          <div className="error-banner">
+            <span>{error}</span>
+            {!isConnected && (
+              <button
+                onClick={handleReconnect}
+                className="btn btn-small error-reconnect-btn"
+              >
+                Reconnect
+              </button>
+            )}
           </div>
+        )}
 
-          {getTypingText() && (
-            <div className="typing-indicator">
-              <div className="typing-dots">
-                <span></span>
-                <span></span>
-                <span></span>
+        <div className="messages-container">
+          <div className="messages-list">
+            {isLoading ? (
+              <div className="loading-container">
+                {renderLoadingSkeletons()}
               </div>
-              {getTypingText()}
-            </div>
-          )}
+            ) : messages.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">💬</div>
+                <h3 className="empty-title">Welcome to Premium Chat</h3>
+                <p>Start the conversation by sending your first message</p>
+              </div>
+            ) : (
+              messages.map((msg, index) => (
+                <Message
+                  key={msg.id}
+                  message={msg}
+                  currentUser={username}
+                  socket={socket}
+                  previousMessage={messages[index - 1]}
+                />
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
 
-          <div className="input-section">
-            <form onSubmit={handleSendMessage} className="message-input-form">
+        <div className="typing-indicator">{getTypingText()}</div>
+
+        <div
+          {...getRootProps({
+            className: `input-section ${isDragActive ? "active" : ""}`,
+          })}
+        >
+          <input {...getInputProps()} />
+          <div className="input-container">
+            {uploadProgress && (
+              <div className="upload-progress">
+                <div className="upload-progress-text">
+                  Uploading {uploadProgress.file}: {uploadProgress.percent}%
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${uploadProgress.percent}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSendMessage} className="input-form">
               <div className="input-wrapper">
                 <textarea
                   className="message-input"
@@ -509,90 +512,115 @@ export default function ChatRoom() {
                     setNewMessage(e.target.value);
                     handleTyping();
                   }}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type a message or drop files here..."
+                  onKeyDown={handleKeyPress}
+                  placeholder={
+                    isDragActive
+                      ? "Drop files here to upload..."
+                      : "Type your message..."
+                  }
                   maxLength={1000}
                   disabled={!isConnected || isLoading}
                   rows="1"
+                  onInput={(e) => {
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(
+                      e.target.scrollHeight,
+                      120
+                    )}px`;
+                  }}
                 />
-                <div className="message-counter">{newMessage.length}/1000</div>
+                <div className="char-count">{newMessage.length}/1000</div>
               </div>
-              <button
-                type="submit"
-                className="send-btn"
-                disabled={!newMessage.trim() || !isConnected || isLoading}
-              >
-                <span className="send-icon">✈️</span> Send
-              </button>
-            </form>
-            <div
-              {...getRootProps({
-                className: `dropzone ${isDragActive ? "active" : ""}`,
-              })}
-            >
-              <input {...getInputProps()} />
-              <p>
-                {isDragActive
-                  ? "Drop files here..."
-                  : "Drag & drop PDFs, images, docs, or code files"}
-              </p>
-              {uploadProgress && (
-                <div className="upload-progress">
-                  <div
-                    className="upload-progress-bar"
-                    style={{ width: `${uploadProgress.percent}%` }}
-                  ></div>
-                  <div className="upload-progress-text">
-                    Uploading {uploadProgress.file}: {uploadProgress.percent}%
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
 
-        <div className={`users-sidebar ${isSidebarOpen ? "open" : ""}`}>
-          <div className="sidebar-header">
-            <h3>Online Users</h3>
-            <div className="user-count-badge">{users.length}</div>
-            {window.innerWidth <= 768 && (
-              <button onClick={toggleSidebar} className="close-sidebar-btn">
-                ✕
-              </button>
-            )}
-          </div>
-          <div className="users-list">
-            {users.length === 0 ? (
-              <div className="empty-users">
-                <span className="empty-users-icon">👥</span>
-                <p>No users online</p>
+              <div className="input-actions">
+                <button
+                  type="button"
+                  className="btn btn-icon file-attach-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files"
+                >
+                  📎
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  onChange={(e) => onDrop(Array.from(e.target.files))}
+                  multiple
+                />
+
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-icon send-btn"
+                  disabled={!newMessage.trim() || !isConnected || isLoading}
+                  title="Send message"
+                >
+                  ✈️
+                </button>
               </div>
-            ) : (
-              users.map((user, index) => (
-                <div key={`${user}-${index}`} className="user-item">
-                  <div className="user-avatar">
-                    {user.charAt(0).toUpperCase()}
-                    <div className="status-indicator"></div>
-                  </div>
-                  <span className="user-name">
-                    {user}
-                    {user === username && (
-                      <span className="you-badge">You</span>
-                    )}
-                  </span>
-                </div>
-              ))
+            </form>
+
+            {isDragActive && (
+              <div className="dropzone active">
+                <p>📁 Drop files here to upload</p>
+              </div>
             )}
-          </div>
-          <div className="sidebar-footer">
-            <div className="security-badge">
-              <span className="lock-icon">🔒</span> End-to-End Encrypted
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="developer-credit">Developed by B Sai Praneeth</div>
+      <div className={`users-sidebar ${isSidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-header">
+          <h3 className="sidebar-title">Online Users</h3>
+          <div className="sidebar-header-right">
+            <div className="user-count-badge">{users.length}</div>
+            <button
+              onClick={toggleSidebar}
+              className="btn btn-icon sidebar-close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="users-list">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="user-item">
+                <div
+                  className="user-avatar skeleton"
+                  style={{ background: "var(--bg-2)" }}
+                ></div>
+                <div style={{ flex: 1 }}>
+                  <div className="skeleton-line short"></div>
+                  <div
+                    className="skeleton-line short"
+                    style={{ width: "60%" }}
+                  ></div>
+                </div>
+              </div>
+            ))
+          ) : users.length === 0 ? (
+            <div className="empty-state" style={{ padding: "2rem 1rem" }}>
+              <div className="empty-icon">👥</div>
+              <p>No other users online</p>
+            </div>
+          ) : (
+            users.map((user, index) => (
+              <div key={`${user}-${index}`} className="user-item">
+                <div className="user-avatar">
+                  {user.charAt(0).toUpperCase()}
+                  <div className="status-dot"></div>
+                </div>
+                <div className="user-name">
+                  {user}
+                  {user === username && <span className="user-badge">You</span>}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
