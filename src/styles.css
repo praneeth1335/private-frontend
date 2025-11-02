@@ -82,11 +82,37 @@ body[data-theme="dark"] {
     var(--bg-0);
 
   /* Custom Cursors - Dark */
-  --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='6' fill='none' stroke='rgba(255,255,255,0.9)' stroke-width='2'/><circle cx='16' cy='16' r='1' fill='rgba(255,255,255,0.9)'/></svg>")
-      16 16,
-    auto;
-  --cursor-pointer: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path fill='rgba(255,255,255,0.9)' stroke='rgba(0,0,0,0.5)' stroke-width='1' d='M5.5 26.5l6-6.001 3.584 3.583 2.417-2.416-3.584-3.584 6.001-6L21.5 4l-6.5 1.5-6.001 6.001L5.417 8 3 10.417l3.584 3.584-6.001 6.001L5.5 26.5z'/></svg>")
-      4 4,
+  --cursor-default: url("data:image/svg+xml;utf8,\
+  <svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'>\
+    <rect width='32' height='32' fill='none'/>\
+    <rect x='2' y='2' width='2' height='16' fill='white'/>\
+    <rect x='4' y='4' width='2' height='2' fill='white'/>\
+    <rect x='6' y='6' width='2' height='2' fill='white'/>\
+    <rect x='8' y='8' width='2' height='2' fill='white'/>\
+    <rect x='10' y='10' width='2' height='2' fill='white'/>\
+    <rect x='12' y='12' width='2' height='2' fill='white'/>\
+    <rect x='4' y='16' width='4' height='2' fill='white'/>\
+    <rect x='6' y='18' width='2' height='4' fill='white'/>\
+    <rect x='8' y='20' width='2' height='4' fill='white'/>\
+  </svg>")
+      2 2,
+    pointer;
+
+  /* Pointer Cursor — larger pixel arrow */
+  --cursor-pointer: url("data:image/svg+xml;utf8,\
+  <svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'>\
+    <rect width='32' height='32' fill='none'/>\
+    <rect x='2' y='2' width='2' height='16' fill='white'/>\
+    <rect x='4' y='4' width='2' height='2' fill='white'/>\
+    <rect x='6' y='6' width='2' height='2' fill='white'/>\
+    <rect x='8' y='8' width='2' height='2' fill='white'/>\
+    <rect x='10' y='10' width='2' height='2' fill='white'/>\
+    <rect x='12' y='12' width='2' height='2' fill='white'/>\
+    <rect x='4' y='16' width='4' height='2' fill='white'/>\
+    <rect x='6' y='18' width='2' height='4' fill='white'/>\
+    <rect x='8' y='20' width='2' height='4' fill='white'/>\
+  </svg>")
+      2 2,
     pointer;
 }
 
