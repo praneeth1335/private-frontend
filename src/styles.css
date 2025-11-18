@@ -1797,3 +1797,477 @@ body {
     overflow: visible;
   }
 }
+
+/* Role badges */
+.role-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: var(--space-sm);
+}
+
+.role-badge.leader {
+  background: var(--accent);
+  color: white;
+}
+
+.role-badge.co-leader {
+  background: var(--success);
+  color: white;
+}
+
+.user-badge {
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 0.18rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Persistent chat badge */
+.persistent-badge {
+  margin-left: var(--space-sm);
+  font-size: 0.9rem;
+  cursor: help;
+}
+
+/* User actions menu */
+.user-actions {
+  position: relative;
+  margin-left: auto;
+}
+
+.user-menu-btn {
+  padding: 0.2rem;
+  font-size: 0.8rem;
+  min-width: auto;
+  min-height: auto;
+}
+
+.user-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 160px;
+  box-shadow: var(--shadow-2);
+}
+
+.user-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.user-menu button:hover {
+  background: var(--bg-2);
+}
+
+.user-menu button:last-child {
+  margin-bottom: 0;
+  color: var(--danger);
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+/* PDF export dropdown */
+.pdf-export-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.pdf-export-dropdown .dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 200px;
+  box-shadow: var(--shadow-2);
+}
+
+.dropdown-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.dropdown-menu button:hover {
+  background: var(--bg-2);
+}
+
+.dropdown-menu button:last-child {
+  margin-bottom: 0;
+}
+
+/* User item layout improvements */
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem;
+  border-radius: 12px;
+  transition: background var(--fast);
+  cursor: default;
+  position: relative;
+}
+
+.user-item:hover {
+  background: var(--bg-2);
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* Room options styles */
+.room-options {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--soft-border);
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
+.persistence-select {
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.option-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* User role badges */
+.role-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: var(--space-sm);
+}
+
+.role-badge.leader {
+  background: var(--accent);
+  color: white;
+}
+
+.role-badge.co-leader {
+  background: var(--success);
+  color: white;
+}
+
+/* User actions menu */
+.user-actions {
+  position: relative;
+  margin-left: auto;
+}
+
+.user-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 150px;
+  box-shadow: var(--shadow-2);
+}
+
+.user-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.user-menu button:hover {
+  background: var(--bg-2);
+}
+
+/* PDF export dropdown */
+.pdf-export-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.pdf-export-dropdown .dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 200px;
+  box-shadow: var(--shadow-2);
+  display: none;
+}
+
+.pdf-export-dropdown:hover .dropdown-menu {
+  display: block;
+}
+
+.dropdown-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.dropdown-menu button:hover {
+  background: var(--bg-2);
+}
+
+/* Add these styles to your styles.css */
+
+/* Role badges */
+.role-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: var(--space-sm);
+}
+
+.role-badge.leader {
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #000;
+  font-weight: 700;
+}
+
+.role-badge.co-leader {
+  background: linear-gradient(135deg, #c0c0c0, #e0e0e0);
+  color: #000;
+  font-weight: 600;
+}
+
+.user-badge {
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 0.18rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Persistent chat badge */
+.persistent-badge {
+  background: var(--success);
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-left: var(--space-sm);
+}
+
+.room-info-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: 0.25rem;
+}
+
+.room-info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg-2);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--soft-border);
+}
+
+/* User actions menu */
+.user-actions {
+  position: relative;
+  margin-left: auto;
+}
+
+.user-menu-btn {
+  padding: 0.2rem;
+  font-size: 0.8rem;
+  min-width: auto;
+  min-height: auto;
+  opacity: 0.7;
+  transition: opacity var(--fast);
+}
+
+.user-menu-btn:hover {
+  opacity: 1;
+}
+
+.user-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 160px;
+  box-shadow: var(--shadow-2);
+}
+
+.user-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+  transition: background var(--fast);
+}
+
+.user-menu button:hover {
+  background: var(--bg-2);
+}
+
+.user-menu button:last-child {
+  margin-bottom: 0;
+  color: var(--danger);
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+/* PDF export dropdown */
+.pdf-export-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.pdf-export-dropdown .dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  z-index: 1000;
+  min-width: 200px;
+  box-shadow: var(--shadow-2);
+}
+
+.dropdown-menu button {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+  transition: background var(--fast);
+}
+
+.dropdown-menu button:hover {
+  background: var(--bg-2);
+}
+
+.dropdown-menu button:last-child {
+  margin-bottom: 0;
+}
+
+/* User item layout improvements */
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem;
+  border-radius: 12px;
+  transition: background var(--fast);
+  cursor: default;
+  position: relative;
+}
+
+.user-item:hover {
+  background: var(--bg-2);
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}

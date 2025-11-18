@@ -13,20 +13,25 @@ export default function Message({
 
   useEffect(() => {
     if (message.type === "file" && socket) {
-      const urlMatch = message.content.match(
-        /\(https:\/\/.*\.amazonaws\.com\/(rooms\/[^)]+)\)/
-      );
-      if (urlMatch && urlMatch[1]) {
-        socket.emit("requestDownloadUrl", { key: urlMatch[1] });
+      // Improved URL matching to handle different S3 URL formats
+      const urlMatch =
+        message.content.match(
+          /\(https:\/\/.*\.amazonaws\.com\/(rooms\/[^)]+)\)/
+        ) ||
+        message.fileUrl?.match(/https:\/\/.*\.amazonaws\.com\/(rooms\/[^)]+)/);
+
+      const fileKey = urlMatch ? urlMatch[1] : message.fileKey;
+
+      if (fileKey) {
+        socket.emit("requestDownloadUrl", { key: fileKey });
 
         const handleDownloadUrl = ({ key, downloadUrl }) => {
-          if (key === urlMatch[1]) {
+          if (key === fileKey) {
             setDownloadUrl(downloadUrl);
           }
         };
 
         socket.on("downloadUrl", handleDownloadUrl);
-        socket.emit("requestDownloadUrl", { key: urlMatch[1] });
 
         return () => {
           socket.off("downloadUrl", handleDownloadUrl);
@@ -82,13 +87,15 @@ export default function Message({
 
   const renderContent = () => {
     if (message.type === "file") {
-      const [prefix] = message.content.split("(");
-      const filename = prefix.replace(/📎 /, "").trim();
+      // Improved filename extraction
+      const filename =
+        message.fileName ||
+        message.content.split("(")[0]?.replace(/📎 /, "").trim() ||
+        "Unknown File";
+
       const extension = filename.split(".").pop().toLowerCase();
       const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(extension);
 
-      // **MODIFIED:** This function now fetches the file as a blob
-      // to force a download instead of opening in a new tab.
       const handleDownload = async () => {
         if (!downloadUrl) return;
 
@@ -124,7 +131,11 @@ export default function Message({
             <div className="file-info">
               <div className="file-icon">{getFileIcon(extension)}</div>
               <div className="file-details">
-                <div className="file-name">{filename}</div>
+                <div className="file-name" title={filename}>
+                  {filename.length > 30
+                    ? `${filename.substring(0, 30)}...`
+                    : filename}
+                </div>
                 <div className="file-size">
                   {message.fileSize || "Unknown size"}
                 </div>
@@ -135,10 +146,10 @@ export default function Message({
               <button
                 className="btn btn-small btn-secondary"
                 disabled={!downloadUrl}
-                onClick={handleDownload} // <-- MODIFIED
+                onClick={handleDownload}
                 title="Download file"
               >
-                {downloadUrl ? "Download" : "Loading..."}
+                {downloadUrl ? "📥 Download" : "⏳ Loading..."}
               </button>
 
               {isSelf && message.fileKey && (
@@ -148,7 +159,7 @@ export default function Message({
                   title="Delete file for everyone"
                   style={{ background: "var(--danger)", color: "white" }}
                 >
-                  Delete
+                  🗑️ Delete
                 </button>
               )}
             </div>
@@ -161,8 +172,6 @@ export default function Message({
               className="file-image"
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
-              // **MODIFIED:** Added inline styles to constrain image size
-              // without touching styles.css
               style={{
                 opacity: imageLoaded ? 1 : 0,
                 transition: "opacity 0.3s ease",
@@ -172,7 +181,9 @@ export default function Message({
                 objectFit: "cover",
                 marginTop: "var(--space-sm)",
                 borderRadius: "var(--radius-md)",
+                cursor: "pointer",
               }}
+              onClick={() => window.open(downloadUrl, "_blank")}
             />
           )}
         </>
@@ -199,13 +210,23 @@ export default function Message({
       txt: "📄",
       json: "📋",
       zip: "📦",
+      mp4: "🎥",
+      mp3: "🎵",
+      wav: "🎵",
     };
     return iconMap[extension] || "📎";
   };
 
   const formatMessageContent = (content) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return content.split(urlRegex).map((part, index) => {
+    const parts = content.split(urlRegex);
+
+    if (parts.length === 1) {
+      // No URLs found, return plain text
+      return content;
+    }
+
+    return parts.map((part, index) => {
       if (part.match(urlRegex)) {
         return (
           <a
@@ -214,13 +235,21 @@ export default function Message({
             target="_blank"
             rel="noopener noreferrer"
             className="message-link"
+            title={part}
           >
-            {part}
+            {part.length > 50 ? `${part.substring(0, 50)}...` : part}
           </a>
         );
       }
       return part;
     });
+  };
+
+  // Get user role color if available
+  const getUserRoleColor = () => {
+    // This would need to be passed as a prop or fetched from context
+    // For now, it's a placeholder for future enhancement
+    return null;
   };
 
   return (
@@ -237,7 +266,17 @@ export default function Message({
         }`}
       >
         {!isSystem && !isSelf && (
-          <div className="message-avatar">
+          <div
+            className="message-avatar"
+            style={
+              getUserRoleColor()
+                ? {
+                    background: getUserRoleColor(),
+                    boxShadow: `0 0 10px ${getUserRoleColor()}40`,
+                  }
+                : {}
+            }
+          >
             {message.username?.charAt(0).toUpperCase()}
           </div>
         )}
@@ -245,7 +284,18 @@ export default function Message({
         <div className="message-content-wrapper">
           {!isSystem && (
             <div className="message-header">
-              <div className="message-username">{message.username}</div>
+              <div
+                className="message-username"
+                style={getUserRoleColor() ? { color: getUserRoleColor() } : {}}
+              >
+                {message.username}
+                {/* Placeholder for role badge - would need role data */}
+                {/* {message.role && message.role !== 'member' && (
+                  <span className={`role-badge-mini ${message.role}`}>
+                    {message.role === 'leader' ? '👑' : '⭐'}
+                  </span>
+                )} */}
+              </div>
               <div className="message-time">
                 {formatTimestamp(message.timestamp)}
               </div>
@@ -273,8 +323,11 @@ Message.propTypes = {
     timestamp: PropTypes.string.isRequired,
     type: PropTypes.oneOf(["user", "system", "file"]).isRequired,
     fileKey: PropTypes.string,
+    fileUrl: PropTypes.string,
+    fileName: PropTypes.string,
     uploaderSocketId: PropTypes.string,
     fileSize: PropTypes.string,
+    // role: PropTypes.oneOf(['leader', 'co-leader', 'member']), // For future enhancement
   }).isRequired,
   currentUser: PropTypes.string.isRequired,
   socket: PropTypes.object,

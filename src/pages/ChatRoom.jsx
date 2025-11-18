@@ -23,13 +23,36 @@ export default function ChatRoom() {
   );
   const [uploadProgress, setUploadProgress] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 820);
+  const [userRole, setUserRole] = useState("member");
+  const [showUserMenu, setShowUserMenu] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [roomInfo, setRoomInfo] = useState(null);
 
-  const messagesEndRef = useRef(null);
+  const messageEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
   const fileInputRef = useRef(null);
+  const exportMenuRef = useRef(null);
 
   const username = localStorage.getItem("username");
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target)
+      ) {
+        setShowExportMenu(false);
+      }
+      if (showUserMenu) {
+        setShowUserMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showUserMenu]);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -41,7 +64,7 @@ export default function ChatRoom() {
   };
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   useEffect(() => {
@@ -50,6 +73,101 @@ export default function ChatRoom() {
 
   const toggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev);
+  };
+
+  // ✅ Updated handleUserAction function
+  const handleUserAction = async (user, action) => {
+    console.log(`🔄 User action: ${action} on ${user}`);
+
+    if (!socket || !isConnected) {
+      showToast("Not connected to server", "error");
+      return;
+    }
+
+    try {
+      if (action === "kick") {
+        if (
+          window.confirm(`Are you sure you want to kick ${user} from the room?`)
+        ) {
+          socket.emit("kickUser", { targetUsername: user });
+          showToast(`Kicking ${user}...`, "info");
+        }
+      } else if (action === "make-co-leader") {
+        if (
+          window.confirm(
+            `Make ${user} a co-leader? They will be able to manage users but cannot assign roles.`
+          )
+        ) {
+          socket.emit("assignRole", {
+            targetUsername: user,
+            newRole: "co-leader",
+          });
+        }
+      } else if (action === "make-member") {
+        if (window.confirm(`Remove ${user}'s co-leader role?`)) {
+          socket.emit("assignRole", {
+            targetUsername: user,
+            newRole: "member",
+          });
+        }
+      } else if (action === "transfer-leadership") {
+        if (
+          window.confirm(
+            `Transfer leadership to ${user}? You will become a co-leader. This action cannot be undone.`
+          )
+        ) {
+          socket.emit("assignRole", {
+            targetUsername: user,
+            newRole: "leader",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("User action error:", error);
+      showToast("Failed to perform action", "error");
+    }
+    setShowUserMenu(null);
+  };
+
+  const exportToPDF = async (includeMedia = false) => {
+    try {
+      showToast("Generating PDF...", "info");
+
+      const serverUrl = getServerUrl();
+      const response = await fetch(`${serverUrl}/api/export/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomCode,
+          includeMedia,
+          messages: includeMedia
+            ? messages
+            : messages.filter((m) => m.type !== "file"),
+        }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `chat-${roomCode}-${
+          new Date().toISOString().split("T")[0]
+        }.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showToast("PDF exported successfully", "success");
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.msg || "Failed to export PDF", "error");
+      }
+    } catch (error) {
+      console.error("PDF export error:", error);
+      showToast("Failed to export PDF", "error");
+    }
+    setShowExportMenu(false);
   };
 
   useEffect(() => {
@@ -85,11 +203,12 @@ export default function ChatRoom() {
         setError("");
         setIsLoading(false);
 
+        console.log("🔄 Emitting joinRoom with:", { username, roomCode });
+
         newSocket.emit("joinRoom", {
           username: username,
           roomCode: roomCode,
         });
-
         showToast("Connected to chat", "success");
       });
 
@@ -101,11 +220,11 @@ export default function ChatRoom() {
       });
 
       newSocket.on("connect_error", (error) => {
-        let errorMessage = "Connection failed. ";
+        let errorMessage = "Connection failed.";
         if (error.message.includes("ECONNREFUSED")) {
-          errorMessage += "Server unavailable.";
+          errorMessage += " Server unavailable.";
         } else if (error.message.includes("timeout")) {
-          errorMessage += "Request timeout.";
+          errorMessage += " Request timeout.";
         } else {
           errorMessage += error.message;
         }
@@ -149,6 +268,27 @@ export default function ChatRoom() {
         setUsers(userList || []);
       });
 
+      newSocket.on("roomInfo", (info) => {
+        console.log("📋 Room info received:", info);
+        setRoomInfo(info);
+        if (info.userRole) {
+          setUserRole(info.userRole);
+          localStorage.setItem("userRole", info.userRole);
+        }
+        if (info.isPersistent !== undefined) {
+          localStorage.setItem("isPersistent", info.isPersistent.toString());
+        }
+        if (info.persistenceDays) {
+          localStorage.setItem(
+            "persistenceDays",
+            info.persistenceDays.toString()
+          );
+        }
+        if (info.createdBy) {
+          localStorage.setItem("createdBy", info.createdBy);
+        }
+      });
+
       newSocket.on("userTyping", (typingUsername) => {
         setTypingUsers((prev) => new Set([...prev, typingUsername]));
       });
@@ -165,16 +305,55 @@ export default function ChatRoom() {
         setMessages((prev) => prev.filter((msg) => msg.fileKey !== key));
       });
 
-      setSocket(newSocket);
-
-      return () => {
-        if (socketRef.current) {
-          socketRef.current.close();
+      // ✅ Added socket event listeners
+      newSocket.on("userKicked", ({ username: kickedUser }) => {
+        console.log(`User kicked: ${kickedUser}`);
+        if (kickedUser === username) {
+          showToast("You have been kicked from the room", "error");
+          localStorage.removeItem("username");
+          localStorage.removeItem("userRole");
+          localStorage.removeItem("isPersistent");
+          localStorage.removeItem("persistenceDays");
+          navigate("/");
+        } else {
+          showToast(`${kickedUser} was kicked from the room`, "info");
         }
-      };
+      });
+
+      newSocket.on("roleAssigned", ({ targetUsername, newRole, message }) => {
+        console.log(`Role assigned: ${targetUsername} is now ${newRole}`);
+
+        if (targetUsername === username) {
+          setUserRole(newRole);
+          localStorage.setItem("userRole", newRole);
+          showToast(message || `You are now ${newRole}`, "success");
+        } else {
+          showToast(message || `${targetUsername} is now ${newRole}`, "info");
+        }
+
+        // Refresh the users list to show updated roles
+        // The server should send an updated roomUsers event
+      });
+
+      newSocket.on("kicked", (message) => {
+        showToast(message, "error");
+        localStorage.removeItem("username");
+        localStorage.removeItem("userRole");
+        localStorage.removeItem("isPersistent");
+        localStorage.removeItem("persistenceDays");
+        navigate("/");
+      });
+
+      setSocket(newSocket);
     };
 
     connectSocket();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
+    };
   }, [roomCode, username, navigate]);
 
   const handleSendMessage = (e) => {
@@ -240,14 +419,12 @@ export default function ChatRoom() {
           try {
             const xhr = new XMLHttpRequest();
             xhr.open("PUT", presignedUrl, true);
-
             xhr.upload.onprogress = (event) => {
               if (event.lengthComputable) {
                 const percent = Math.round((event.loaded / event.total) * 100);
                 setUploadProgress({ file: file.name, percent });
               }
             };
-
             xhr.setRequestHeader("Content-Type", fileType);
             xhr.onload = () => {
               if (xhr.status === 200) {
@@ -264,12 +441,10 @@ export default function ChatRoom() {
                 setUploadProgress(null);
               }
             };
-
             xhr.onerror = () => {
               showToast("File upload failed", "error");
               setUploadProgress(null);
             };
-
             xhr.send(file);
           } catch (err) {
             showToast("File upload failed", "error");
@@ -308,6 +483,10 @@ export default function ChatRoom() {
         socket.close();
       }
       localStorage.removeItem("username");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("isPersistent");
+      localStorage.removeItem("persistenceDays");
+      localStorage.removeItem("createdBy");
       navigate("/");
     }
   };
@@ -336,14 +515,18 @@ export default function ChatRoom() {
   };
 
   const showToast = (message, type = "info") => {
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll(".toast");
+    existingToasts.forEach((toast) => toast.remove());
+
     const toast = document.createElement("div");
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `
-      <span class="toast-icon">${
-        type === "error" ? "⚠️" : type === "success" ? "✅" : "ℹ️"
-      }</span>
-      <span class="toast-content">${message}</span>
-    `;
+            <span class="toast-icon">${
+              type === "error" ? "⚠️" : type === "success" ? "✅" : "ℹ️"
+            }</span>
+            <span class="toast-content">${message}</span>
+        `;
 
     document.body.appendChild(toast);
 
@@ -375,6 +558,43 @@ export default function ChatRoom() {
       </div>
     ));
 
+  // ✅ Updated getRoleBadge function
+  const getRoleBadge = (user) => {
+    if (user === username) {
+      // Show current user's role
+      if (userRole === "leader") {
+        return (
+          <span className="role-badge leader" title="Room Leader">
+            👑 Leader
+          </span>
+        );
+      } else if (userRole === "co-leader") {
+        return (
+          <span className="role-badge co-leader" title="Co-Leader">
+            ⭐ Co-Leader
+          </span>
+        );
+      }
+      return (
+        <span className="user-badge" title="You">
+          You
+        </span>
+      );
+    }
+
+    // For other users, you might need to get their roles from room data
+    // This is a placeholder - you'll need to implement proper user role tracking
+    return null;
+  };
+
+  const canManageUsers = () => {
+    return userRole === "leader" || userRole === "co-leader";
+  };
+
+  const canAssignRoles = () => {
+    return userRole === "leader";
+  };
+
   return (
     <div className="chat-container">
       <div
@@ -384,9 +604,9 @@ export default function ChatRoom() {
 
       {!isConnected && (
         <div className="connection-status">
-          <div
-            className={`status-indicator ${isConnected ? "" : "offline"}`}
-          ></div>
+          <div className={`status-indicator ${isConnected ? "" : "offline"}`}>
+            <div className="status-dot"></div>
+          </div>
           <span>{isConnected ? "Connected" : "Disconnected"}</span>
           {!isConnected && (
             <button
@@ -407,8 +627,45 @@ export default function ChatRoom() {
             <div className="room-code-wrapper">
               <div className="room-code" onClick={copyRoomCode}>
                 <span>{roomCode}</span>
-                <span>📋</span>
+                <span> 📋</span>
               </div>
+              {roomInfo?.isPersistent && (
+                <span
+                  className="persistent-badge"
+                  title={`Persistent Chat - ${roomInfo.persistenceDays} days`}
+                >
+                  💾 {roomInfo.persistenceDays}d
+                </span>
+              )}
+              {!roomInfo?.isPersistent && roomInfo && (
+                <span
+                  className="persistent-badge"
+                  style={{ background: "var(--muted)" }}
+                  title="Temporary Chat - 7 days"
+                >
+                  ⏳ 7d
+                </span>
+              )}
+            </div>
+            <div className="room-info-row">
+              {userRole === "leader" && (
+                <span className="room-info-item" title="Room Leader">
+                  👑 Leader
+                </span>
+              )}
+              {userRole === "co-leader" && (
+                <span className="room-info-item" title="Co-Leader">
+                  ⭐ Co-Leader
+                </span>
+              )}
+              {roomInfo?.createdBy && (
+                <span
+                  className="room-info-item"
+                  title={`Created by ${roomInfo.createdBy}`}
+                >
+                  by {roomInfo.createdBy}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -418,9 +675,33 @@ export default function ChatRoom() {
             <span>{users.length} online</span>
           </div>
 
+          {/* PDF Export Dropdown */}
+          {(userRole === "leader" || userRole === "co-leader") && (
+            <div className="pdf-export-dropdown" ref={exportMenuRef}>
+              <button
+                className="btn btn-icon"
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                title="Export Chat"
+              >
+                📄
+              </button>
+              {showExportMenu && (
+                <div className="dropdown-menu">
+                  <button onClick={() => exportToPDF(false)}>
+                    Export PDF (Text Only)
+                  </button>
+                  <button onClick={() => exportToPDF(true)}>
+                    Export PDF (With Media)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={toggleTheme}
             className="btn btn-icon theme-toggle-btn"
+            title="Toggle theme"
           >
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
@@ -428,6 +709,7 @@ export default function ChatRoom() {
           <button
             onClick={toggleSidebar}
             className="btn btn-icon toggle-users-btn"
+            title="Toggle users sidebar"
           >
             👥
           </button>
@@ -476,7 +758,7 @@ export default function ChatRoom() {
                 />
               ))
             )}
-            <div ref={messagesEndRef} />
+            <div ref={messageEndRef} />
           </div>
         </div>
 
@@ -555,20 +837,21 @@ export default function ChatRoom() {
                   disabled={!newMessage.trim() || !isConnected || isLoading}
                   title="Send message"
                 >
-                  ✈️
+                  ➤
                 </button>
               </div>
             </form>
 
             {isDragActive && (
               <div className="dropzone active">
-                <p>📁 Drop files here to upload</p>
+                <p>Drop files here to upload</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
+      {/* ✅ Updated Users List Section */}
       <div className={`users-sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
           <h3 className="sidebar-title">Online Users</h3>
@@ -602,22 +885,81 @@ export default function ChatRoom() {
             ))
           ) : users.length === 0 ? (
             <div className="empty-state" style={{ padding: "2rem 1rem" }}>
-              <div className="empty-icon">👥</div>
+              <div className="empty-icon">👤</div>
               <p>No other users online</p>
             </div>
           ) : (
-            users.map((user, index) => (
-              <div key={`${user}-${index}`} className="user-item">
-                <div className="user-avatar">
-                  {user.charAt(0).toUpperCase()}
-                  <div className="status-dot"></div>
+            users.map((user, index) => {
+              // Get user role from room data (you might need to store this in state)
+              const isCurrentUser = user === username;
+
+              return (
+                <div key={`${user}-${index}`} className="user-item">
+                  <div className="user-avatar">
+                    {user.charAt(0).toUpperCase()}
+                    <div className="status-dot"></div>
+                  </div>
+                  <div className="user-name">
+                    <span className="username-text">{user}</span>
+                    {getRoleBadge(user)}
+                    {canManageUsers() && !isCurrentUser && (
+                      <div className="user-actions">
+                        <button
+                          className="btn btn-icon btn-small user-menu-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowUserMenu(
+                              showUserMenu === user ? null : user
+                            );
+                          }}
+                          title="User actions"
+                        >
+                          ⋮
+                        </button>
+                        {showUserMenu === user && (
+                          <div className="user-menu">
+                            {canAssignRoles() && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleUserAction(
+                                      user,
+                                      "transfer-leadership"
+                                    )
+                                  }
+                                >
+                                  👑 Transfer Leadership
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleUserAction(user, "make-co-leader")
+                                  }
+                                >
+                                  ⭐ Make Co-Leader
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleUserAction(user, "make-member")
+                                  }
+                                >
+                                  👤 Make Member
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleUserAction(user, "kick")}
+                              style={{ color: "var(--danger)" }}
+                            >
+                              🚫 Kick User
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="user-name">
-                  {user}
-                  {user === username && <span className="user-badge">You</span>}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
